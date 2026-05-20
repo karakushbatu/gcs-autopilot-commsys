@@ -1,0 +1,10 @@
+CompileFlags:
+  Add:
+    - -std=c++11
+    - -Isrc
+    - -pthread
+    - -Wall
+    - -Wextra
+  Remove: []
+Diagnostics:
+  Suppress: []

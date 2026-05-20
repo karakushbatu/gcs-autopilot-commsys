@@ -1,0 +1,49 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ python3
+
+      - name: Build
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)
+
+      - name: Start GCS (default ACL — allows localhost)
+        run: |
+          ./build/gcs --allow-localhost &
+          echo $! > /tmp/gcs.pid
+          sleep 1
+
+      - name: Start Autopilot
+        run: |
+          ./build/autopilot &
+          echo $! > /tmp/ap.pid
+          sleep 1
+
+      - name: Run main tests (TCP + UDP + Heartbeat)
+        run: python3 tests/test_tcp_commands.py &&
+             python3 tests/test_udp_checksum.py &&
+             python3 tests/test_heartbeat.py
+
+      - name: Stop GCS, restart with restrictive ACL for ACL test
+        run: |
+          kill $(cat /tmp/gcs.pid) || true
+          sleep 0.5
+          ./build/gcs --subnet 192.168.2.0/24 &
+          echo $! > /tmp/gcs2.pid
+          sleep 0.5
+
+      - name: Run ACL test
+        run: python3 tests/test_acl.py
+
+      - name: Cleanup
+        if: always()
+        run: |
+          kill $(cat /tmp/gcs2.pid) || true
+          kill $(cat /tmp/ap.pid)  || true
